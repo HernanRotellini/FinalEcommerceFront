@@ -3,14 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-// 1. ✅ Importamos el hook de productos
 import { useProducts } from '../context/ProductContext';
 
 export default function Checkout() {
   const navigate = useNavigate();
   const { user, login } = useAuth();
-  
-  // 2. ✅ Obtenemos la función para recargar el stock global
   const { refreshProducts } = useProducts();
   
   const [cartItems, setCartItems] = useState([]);
@@ -49,8 +46,8 @@ export default function Checkout() {
         if (cartRes.data.has_adjustments) {
           toast((t) => (
             <span>
-              ⚠️ <b>Atención:</b> El stock cambió. Tu pedido fue ajustado.
-              <button onClick={() => toast.dismiss(t.id)} className="ml-2 border p-1 text-xs bg-white rounded text-black">Entendido</button>
+              ⚠️ Stock ajustado automáticamente.
+              <button onClick={() => toast.dismiss(t.id)} className="ml-2 border p-1 text-xs bg-white rounded text-black">OK</button>
             </span>
           ), { duration: 6000, icon: '⚠️' });
         }
@@ -73,14 +70,14 @@ export default function Checkout() {
   const handleUpdateQuantity = async (productId, newQuantity, stockMax) => {
     if (newQuantity < 1) return;
     if (newQuantity > stockMax) {
-        toast.error(`Stock máximo disponible: ${stockMax}`);
+        toast.error(`Stock máximo: ${stockMax}`);
         return;
     }
     try {
       await api.put(`/cart/${user.id_key}/items`, { product_id: productId, quantity: newQuantity });
       refreshCart();
     } catch (error) { 
-        toast.error(error.response?.data?.detail || "Error actualizando cantidad"); 
+        toast.error("Error actualizando cantidad"); 
     }
   };
 
@@ -101,12 +98,9 @@ export default function Checkout() {
 
   const executePurchase = async () => {
     if (cartItems.length === 0) return toast.error("Carrito vacío");
-    if (isNaN(total) || total < 0) return toast.error("Error en el monto total");
-
     const loadingToast = toast.loading('Procesando orden...');
 
     try {
-      // 1. Factura
       const paymentTypeValue = formData.payment_type === 'cash' ? 1 : 2;
       const billRes = await api.post('/bills', {
         bill_number: `BILL-${Date.now()}`,
@@ -118,7 +112,6 @@ export default function Checkout() {
       });
       const billId = billRes.data.id_key;
 
-      // 2. Orden
       const orderPayload = {
         total: parseFloat(total),
         delivery_method: 3, 
@@ -128,7 +121,6 @@ export default function Checkout() {
       const orderRes = await api.post('/orders', orderPayload);
       const orderId = orderRes.data.id_key;
 
-      // 3. Detalles
       await Promise.all(cartItems.map(item => 
         api.post('/order_details', {
           quantity: parseInt(item.quantity),
@@ -138,11 +130,7 @@ export default function Checkout() {
         })
       ));
 
-      // 4. Vaciar Carrito
       await api.delete(`/cart/${user.id_key}`);
-
-      // 5. ✅ ACTUALIZAR EL CONTEXTO GLOBAL DE PRODUCTOS
-      // Esto asegura que al volver al inicio, el stock se vea descontado inmediatamente.
       await refreshProducts();
 
       toast.dismiss(loadingToast);
@@ -152,95 +140,65 @@ export default function Checkout() {
     } catch (error) {
       console.error("Error checkout:", error);
       toast.dismiss(loadingToast);
-      const msg = error.response?.data?.detail;
-      toast.error(Array.isArray(msg) ? `Error: ${msg[0].msg}` : (msg || 'Error procesando la orden.'));
+      toast.error('Error procesando la orden.');
     }
   };
 
   const handleSubmitForm = async (e) => {
     e.preventDefault();
-    
-    // VALIDACIÓN DE TELÉFONO
     const phoneDigits = formData.telephone.replace(/\D/g, '');
     if (formData.telephone && (phoneDigits.length < 10 || phoneDigits.length > 13)) {
       toast.error("El teléfono debe tener entre 10 y 13 números");
       return;
     }
-
-    // DETECCIÓN DE CAMBIOS
+    
     const hasChanges = 
         formData.name !== (user.name || '') ||
         formData.lastname !== (user.lastname || '') || 
         formData.telephone !== (user.telephone || '');
 
-    if (hasChanges) {
-        setShowSaveDataModal(true);
-    } else {
-        executePurchase();
-    }
+    if (hasChanges) setShowSaveDataModal(true);
+    else executePurchase();
   };
 
   const handleSaveAndPurchase = async () => {
     try {
         const updatePromise = api.put(`/clients/id/${user.id_key}`, {
-            name: formData.name,
-            lastname: formData.lastname,
-            email: formData.email,
-            telephone: formData.telephone
+            name: formData.name, lastname: formData.lastname, email: formData.email, telephone: formData.telephone
         });
-
-        toast.promise(updatePromise, {
-            loading: 'Guardando tus datos...',
-            success: 'Perfil actualizado!',
-            error: 'No se pudo guardar el perfil, pero seguimos con la compra.'
-        });
-
+        toast.promise(updatePromise, { loading: 'Guardando datos...', success: 'Perfil actualizado!', error: 'Error guardando datos' });
         const res = await updatePromise;
-        
-        login({
-            ...user,
-            name: res.data.name,
-            lastname: res.data.lastname,
-            email: res.data.email,
-            telephone: res.data.telephone
-        });
-
-    } catch (error) {
-        console.error("Error guardando datos en checkout", error);
-    } finally {
-        setShowSaveDataModal(false);
-        executePurchase();
-    }
+        login({ ...user, name: res.data.name, lastname: res.data.lastname, telephone: res.data.telephone });
+    } catch (error) { console.error(error); } 
+    finally { setShowSaveDataModal(false); executePurchase(); }
   };
 
   if (!user) return null;
 
   return (
-    <div className="grid md:grid-cols-2 gap-8 relative">
-      {/* Columna Izquierda: Carrito */}
-      <div className="bg-white p-6 rounded-xl shadow">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
+      <div className="bg-white p-4 md:p-6 rounded-xl shadow order-2 md:order-1">
         <h2 className="text-xl font-bold mb-4">Tu Carrito</h2>
         {cartItems.length === 0 ? <p className="text-gray-500">Carrito vacío.</p> : (
           <div className="space-y-4">
             {cartItems.map((item) => (
-              <div key={item.id_key} className={`flex flex-col border-b pb-4 last:border-0 ${item.adjustment_message ? 'bg-orange-50 p-3 rounded-lg border border-orange-100' : ''}`}>
-                {item.adjustment_message && (
-                  <div className="text-xs text-orange-700 font-bold mb-2 flex items-center gap-1">⚠️ {item.adjustment_message}</div>
-                )}
-                <div className="flex justify-between items-center w-full">
-                    <div className="flex-1">
-                        <h3 className="font-bold text-gray-800">{item.product.name}</h3>
+              <div key={item.id_key} className={`flex flex-col border-b pb-4 last:border-0 ${item.adjustment_message ? 'bg-orange-50 p-2 rounded' : ''}`}>
+                {item.adjustment_message && <div className="text-xs text-orange-700 font-bold mb-2">⚠️ {item.adjustment_message}</div>}
+                
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full gap-4">
+                    <div className="flex-1 w-full">
+                        <h3 className="font-bold text-gray-800 text-sm md:text-base">{item.product.name}</h3>
                         <p className="text-gray-500 text-sm">${item.product.price} x unidad</p>
-                        <p className="text-xs text-gray-400 mt-1">Stock disponible: {item.product.stock}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <div className="flex items-center border rounded-lg bg-gray-50 overflow-hidden">
-                            <button type="button" onClick={() => handleUpdateQuantity(item.product_id, item.quantity - 1, item.product.stock)} className="px-3 py-1 hover:bg-gray-200 font-bold text-gray-600 transition-colors">-</button>
+                    
+                    <div className="flex justify-between items-center w-full sm:w-auto gap-3">
+                        <div className="flex items-center border rounded-lg bg-gray-50">
+                            <button type="button" onClick={() => handleUpdateQuantity(item.product_id, item.quantity - 1, item.product.stock)} className="px-3 py-1 hover:bg-gray-200 font-bold text-gray-600">-</button>
                             <span className="px-2 font-medium w-8 text-center text-gray-800">{item.quantity}</span>
-                            <button type="button" onClick={() => handleUpdateQuantity(item.product_id, item.quantity + 1, item.product.stock)} disabled={item.quantity >= item.product.stock} className={`px-3 py-1 font-bold transition-colors ${item.quantity >= item.product.stock ? 'text-gray-300 cursor-not-allowed bg-gray-100' : 'text-gray-600 hover:bg-gray-200'}`}>+</button>
+                            <button type="button" onClick={() => handleUpdateQuantity(item.product_id, item.quantity + 1, item.product.stock)} disabled={item.quantity >= item.product.stock} className="px-3 py-1 font-bold text-gray-600 hover:bg-gray-200 disabled:opacity-50">+</button>
                         </div>
-                        <span className="font-bold w-24 text-right text-lg text-gray-800">${(item.product.price * item.quantity).toFixed(2)}</span>
-                        <button onClick={() => handleRemoveClick(item.product_id)} className="text-gray-400 hover:text-red-500 ml-2 p-1 transition-colors">✕</button>
+                        <span className="font-bold w-20 text-right text-gray-800">${(item.product.price * item.quantity).toFixed(2)}</span>
+                        <button onClick={() => handleRemoveClick(item.product_id)} className="text-red-400 hover:text-red-600 font-bold px-2">✕</button>
                     </div>
                 </div>
               </div>
@@ -249,96 +207,52 @@ export default function Checkout() {
         )}
         {cartItems.length > 0 && (
           <div className="mt-6 pt-4 border-t flex justify-between items-end">
-            <span className="text-gray-500 text-sm">Total a pagar:</span>
-            <span className="text-3xl font-bold text-gray-900">${total.toFixed(2)}</span>
+            <span className="text-gray-500 text-sm">Total:</span>
+            <span className="text-2xl md:text-3xl font-bold text-gray-900">${total.toFixed(2)}</span>
           </div>
         )}
       </div>
 
-      {/* Columna Derecha: Formulario */}
-      <form onSubmit={handleSubmitForm} className="bg-white p-6 rounded-xl shadow space-y-4 h-fit sticky top-24">
-        <h2 className="text-xl font-bold mb-4 text-gray-800">Datos de Facturación</h2>
+      <form onSubmit={handleSubmitForm} className="bg-white p-4 md:p-6 rounded-xl shadow space-y-4 h-fit md:sticky md:top-24 order-1 md:order-2">
+        <h2 className="text-xl font-bold mb-4 text-gray-800">Finalizar Compra</h2>
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-gray-500 font-bold ml-1">Nombre</label>
-            <input 
-                required 
-                className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                value={formData.name} 
-                onChange={e => setFormData({...formData, name: e.target.value})} 
-            />
-          </div>
-          <div>
-             <label className="text-xs text-gray-500 font-bold ml-1">Apellido</label>
-             <input required placeholder="Apellido" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                value={formData.lastname} onChange={e => setFormData({...formData, lastname: e.target.value})} />
-          </div>
+          <div><label className="text-xs font-bold text-gray-500">Nombre</label><input required className="w-full border p-2 rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} /></div>
+          <div><label className="text-xs font-bold text-gray-500">Apellido</label><input required className="w-full border p-2 rounded" value={formData.lastname} onChange={e => setFormData({...formData, lastname: e.target.value})} /></div>
         </div>
-        <div>
-            <label className="text-xs text-gray-500 font-bold ml-1">Email</label>
-            <input required type="email" className="w-full border p-2 rounded bg-gray-100 text-gray-600 cursor-not-allowed" value={formData.email} readOnly />
-        </div>
-        <div>
-            <label className="text-xs text-gray-500 font-bold ml-1">Teléfono</label>
-            <input required placeholder="Ej: 11 1234 5678" className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"
-                value={formData.telephone} onChange={e => setFormData({...formData, telephone: e.target.value})} />
-            <p className="text-xs text-gray-400 mt-1 ml-1">Mínimo 10 dígitos (cod. área + número)</p>
-        </div>
-        <div className="pt-4 border-t">
-            <label className="block text-sm font-medium mb-2 text-gray-700">Método de Pago</label>
-            <select className="w-full border p-2 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none" 
-              onChange={e => setFormData({...formData, payment_type: e.target.value})}>
-              <option value="card">💳 Tarjeta de Crédito / Débito</option>
-              <option value="cash">💵 Efectivo (Contra entrega)</option>
+        <div><label className="text-xs font-bold text-gray-500">Teléfono</label><input required className="w-full border p-2 rounded" value={formData.telephone} onChange={e => setFormData({...formData, telephone: e.target.value})} /></div>
+        <div><label className="text-xs font-bold text-gray-500">Pago</label>
+            <select className="w-full border p-2 rounded bg-white" onChange={e => setFormData({...formData, payment_type: e.target.value})}>
+              <option value="card">💳 Tarjeta</option>
+              <option value="cash">💵 Efectivo</option>
             </select>
         </div>
-        <button type="submit" disabled={cartItems.length === 0} className={`w-full py-4 rounded-lg font-bold text-white transition-all shadow-lg active:scale-95 ${cartItems.length === 0 ? 'bg-gray-400 cursor-not-allowed shadow-none' : 'bg-green-600 hover:bg-green-700 hover:shadow-green-200'}`}>
+        <button type="submit" disabled={cartItems.length === 0} className="w-full py-4 rounded-lg font-bold text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400">
           {cartItems.length === 0 ? 'Carrito Vacío' : `Pagar $${total.toFixed(2)}`}
         </button>
       </form>
 
-      {/* Modal Confirmación Eliminación */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">¿Quitar del carrito?</h3>
-            <div className="flex justify-end gap-3 mt-4">
-              <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium">Cancelar</button>
-              <button onClick={confirmRemove} className="px-4 py-2 text-white bg-red-600 hover:bg-red-700 rounded-lg font-bold">Eliminar</button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-xl w-full max-w-sm">
+            <h3 className="font-bold mb-4">¿Eliminar producto?</h3>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-gray-600">Cancelar</button>
+              <button onClick={confirmRemove} className="px-4 py-2 bg-red-600 text-white rounded">Eliminar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Confirmación Guardar Datos */}
       {showSaveDataModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 text-center">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
-                <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-xl w-full max-w-sm text-center">
+                <h3 className="font-bold mb-2">¿Guardar datos nuevos?</h3>
+                <p className="text-sm text-gray-500 mb-4">Has cambiado tu información personal.</p>
+                <div className="flex gap-2 justify-center">
+                    <button onClick={() => { setShowSaveDataModal(false); executePurchase(); }} className="px-4 py-2 bg-gray-100 rounded">No guardar</button>
+                    <button onClick={handleSaveAndPurchase} className="px-4 py-2 bg-blue-600 text-white rounded">Guardar y Comprar</button>
+                </div>
             </div>
-            <h3 className="text-lg font-bold text-gray-900 mb-2">¿Quieres guardar los cambios?</h3>
-            <p className="text-gray-500 mb-6">
-                Notamos que modificaste tus datos personales (Nombre, Apellido o Teléfono). 
-                <br/>¿Te gustaría actualizarlos en tu perfil para la próxima?
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button 
-                onClick={() => { setShowSaveDataModal(false); executePurchase(); }} 
-                className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors"
-              >
-                No, solo comprar
-              </button>
-              <button 
-                onClick={handleSaveAndPurchase} 
-                className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-bold transition-colors shadow-lg shadow-blue-200"
-              >
-                Sí, guardar y comprar
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </div>
