@@ -3,19 +3,17 @@ import api from '../api/client';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-// ✅ 1. Importamos el contexto
 import { useProducts } from '../context/ProductContext';
 
 export default function AdminPanel() {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  // ✅ 2. Usamos los datos y la función de recarga del contexto global
   const { products, categories, refreshProducts, loading: contextLoading } = useProducts();
 
   const [activeTab, setActiveTab] = useState('orders');
   const [orders, setOrders] = useState([]);
-  const [loadingOrders, setLoadingOrders] = useState(false); // Loading local solo para órdenes
+  const [loadingOrders, setLoadingOrders] = useState(false);
 
   const [imageFile, setImageFile] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -36,7 +34,6 @@ export default function AdminPanel() {
       navigate('/');
       return;
     }
-    // Si entramos a la pestaña de productos/categorías, nos aseguramos de tener la data fresca
     if (activeTab === 'products' || activeTab === 'categories') {
         refreshProducts();
     }
@@ -80,7 +77,7 @@ export default function AdminPanel() {
       await api.post('/categories', newCategory);
       toast.success("Categoría creada");
       setNewCategory({ name: '' });
-      refreshProducts(); // ✅ Actualizamos globalmente
+      refreshProducts();
     } catch (error) { toast.error("Error creando categoría"); }
   };
 
@@ -89,7 +86,7 @@ export default function AdminPanel() {
     try {
       await api.delete(`/categories/id/${id}`);
       toast.success("Categoría eliminada");
-      refreshProducts(); // ✅ Actualizamos globalmente
+      refreshProducts();
     } catch (error) { toast.error("Error: Puede tener productos asociados"); }
   };
 
@@ -141,7 +138,7 @@ export default function AdminPanel() {
          setImageFile(null);
       }
       
-      await refreshProducts(); // ✅ AWAIT IMPORTANTE: Esperamos que el contexto actualice todo
+      await refreshProducts();
 
     } catch (error) { 
       console.error(error);
@@ -200,7 +197,7 @@ export default function AdminPanel() {
           await api.put(`/products/id/${product.id_key}`, payload);
           toast.success("Producto reactivado");
       }
-      await refreshProducts(); // ✅ Actualizamos contexto global
+      await refreshProducts();
     } catch (error) { 
         toast.error("Error cambiando estado"); 
         console.error(error);
@@ -208,23 +205,22 @@ export default function AdminPanel() {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 max-w-6xl mx-auto min-h-screen">
-      <div className="flex justify-between items-center mb-6 border-b pb-4">
-        <h1 className="text-2xl font-bold text-gray-800">Panel de Administración</h1>
+    <div className="bg-white rounded-xl shadow-lg p-4 md:p-6 max-w-6xl mx-auto min-h-screen">
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 border-b pb-4 gap-4">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-800 text-center md:text-left">Panel de Administración</h1>
         
-        <div className="flex bg-gray-100 p-1 rounded-lg">
-          <button onClick={() => setActiveTab('orders')} className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${activeTab === 'orders' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>📦 Órdenes</button>
-          <button onClick={() => setActiveTab('products')} className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${activeTab === 'products' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>🛒 Productos</button>
-          <button onClick={() => setActiveTab('categories')} className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${activeTab === 'categories' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>🏷️ Categorías</button>
+        <div className="flex bg-gray-100 p-1 rounded-lg overflow-x-auto w-full md:w-auto">
+          <button onClick={() => setActiveTab('orders')} className={`flex-1 md:flex-none px-4 py-2 rounded-md text-sm font-bold transition-colors whitespace-nowrap ${activeTab === 'orders' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>📦 Órdenes</button>
+          <button onClick={() => setActiveTab('products')} className={`flex-1 md:flex-none px-4 py-2 rounded-md text-sm font-bold transition-colors whitespace-nowrap ${activeTab === 'products' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>🛒 Productos</button>
+          <button onClick={() => setActiveTab('categories')} className={`flex-1 md:flex-none px-4 py-2 rounded-md text-sm font-bold transition-colors whitespace-nowrap ${activeTab === 'categories' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>🏷️ Categorías</button>
         </div>
       </div>
 
       {(loadingOrders || (activeTab !== 'orders' && contextLoading)) && <div className="text-center py-10">Cargando datos...</div>}
 
       {!loadingOrders && activeTab === 'orders' && (
-        <div className="overflow-x-auto animate-fade-in">
-          {/* ... Tabla de Órdenes (Se mantiene igual) ... */}
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto shadow-inner rounded-lg border border-gray-100">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
               <tr className="bg-gray-50 border-b">
                 <th className="p-3 text-sm font-bold text-gray-600">ID</th>
@@ -270,14 +266,14 @@ export default function AdminPanel() {
       )}
 
       {!contextLoading && activeTab === 'products' && (
-        <div className="flex flex-col gap-8 animate-fade-in">
+        <div className="flex flex-col gap-8">
           
-          <div className={`bg-gray-50 p-6 rounded-xl border transition-colors w-full ${isEditing ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200'}`}>
+          <div className={`bg-gray-50 p-4 md:p-6 rounded-xl border transition-colors w-full ${isEditing ? 'border-yellow-400 bg-yellow-50' : 'border-gray-200'}`}>
             <h3 className="font-bold text-lg mb-4 text-gray-800 flex items-center gap-2">
                 {isEditing ? '✏️ Editando Producto' : '➕ Nuevo Producto'}
             </h3>
             <form onSubmit={handleSubmitProduct} className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input required placeholder="Nombre del producto" className="w-full border p-3 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
                     value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
                   
@@ -311,13 +307,13 @@ export default function AdminPanel() {
                   <label htmlFor="activeCheck" className="text-gray-700 font-bold select-none cursor-pointer">Producto Activo (Visible en catálogo)</label>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col md:flex-row gap-2">
                   <button type="submit" disabled={uploadingImage}
-                    className={`flex-1 py-3 rounded-lg font-bold text-white transition-all ${uploadingImage ? 'bg-gray-400 cursor-wait' : isEditing ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                    className={`w-full py-3 rounded-lg font-bold text-white transition-all ${uploadingImage ? 'bg-gray-400 cursor-wait' : isEditing ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
                     {uploadingImage ? 'Procesando imagen...' : isEditing ? 'Guardar Cambios' : 'Crear Producto'}
                   </button>
                   {isEditing && (
-                      <button type="button" onClick={cancelEditMode} className="px-6 py-3 rounded-lg font-bold text-gray-600 bg-gray-200 hover:bg-gray-300 transition-colors">Cancelar</button>
+                      <button type="button" onClick={cancelEditMode} className="w-full md:w-auto px-6 py-3 rounded-lg font-bold text-gray-600 bg-gray-200 hover:bg-gray-300 transition-colors">Cancelar</button>
                   )}
               </div>
             </form>
@@ -357,18 +353,17 @@ export default function AdminPanel() {
       )}
 
       {!contextLoading && activeTab === 'categories' && (
-        <div className="grid md:grid-cols-2 gap-8 animate-fade-in">
-           {/* ... Sección Categorías (Igual que antes) ... */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
            <div className="bg-gray-50 p-6 rounded-lg h-fit">
               <h3 className="font-bold text-lg mb-4">Nueva Categoría</h3>
               <form onSubmit={handleCreateCategory} className="flex gap-2">
-                <input required placeholder="Nombre Categoría" className="flex-1 border p-2 rounded" 
+                <input required placeholder="Nombre Categoría" className="flex-1 border p-2 rounded outline-none focus:ring-2 focus:ring-green-500" 
                   value={newCategory.name} onChange={e => setNewCategory({...newCategory, name: e.target.value})} />
                 <button type="submit" className="bg-green-600 text-white px-4 rounded hover:bg-green-700 font-bold">+</button>
               </form>
            </div>
-           <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-left">
+           <div className="border rounded-lg overflow-x-auto">
+              <table className="w-full text-left min-w-[300px]">
                 <thead className="bg-gray-100">
                   <tr><th className="p-3 text-sm text-gray-600">ID</th><th className="p-3 text-sm text-gray-600">Nombre</th><th className="p-3 text-right text-sm text-gray-600">Acción</th></tr>
                 </thead>
@@ -377,7 +372,7 @@ export default function AdminPanel() {
                     <tr key={c.id_key} className="hover:bg-gray-50">
                       <td className="p-3 text-gray-500 text-xs">#{c.id_key}</td>
                       <td className="p-3 font-bold">{c.name}</td>
-                      <td className="p-3 text-right"><button onClick={() => handleDeleteCategory(c.id_key)} className="text-red-500 hover:text-red-700">Eliminar</button></td>
+                      <td className="p-3 text-right"><button onClick={() => handleDeleteCategory(c.id_key)} className="text-red-500 hover:text-red-700 font-medium text-sm">Eliminar</button></td>
                     </tr>
                   ))}
                 </tbody>
